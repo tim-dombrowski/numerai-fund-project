@@ -1,0 +1,529 @@
+---
+title: "Numerai Financial Analysis"
+date: "Last updated: `r Sys.Date()`"
+output: html_notebook
+---
+
+## Preliminary Work: Install/Load Packages
+
+Below is a list of R packages that will be used throughout this R Notebook. 
+
+* The [fredr package](https://cran.r-project.org/package=fredr) is an R package that wraps the FRED API for easy importing of FRED data into R.
+* The [quantmod package](https://cran.r-project.org/package=quantmod) contains tools for importing and analyzing financial data.
+* The [readr package](https://cran.r-project.org/package=readr) is a package for reading in data files. We'll use it to read in the csv file from the Numerai Fund website.
+* The [xts package](https://cran.r-project.org/package=xts) is short for 'eXtensible Time Series', which contains tools for working with time series data.
+* The [lubridate package](https://cran.r-project.org/package=lubridate) simplifies calculation involving dates.
+* The [ggplot2 package](https://cran.r-project.org/package=ggplot2) for graphics and visuals.
+* The [dplyr package](https://cran.r-project.org/package=dplyr) contains tools for data manipulation.
+
+```{r setup, results='hide'}
+# Create list of packages needed for this exercise
+list.of.packages = c("fredr","quantmod","readr","xts","lubridate","ggplot2","dplyr","rmarkdown")
+# Check if any have not yet been installed
+new.packages = list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+# If any need to be installed, install them
+if(length(new.packages)) install.packages(new.packages)
+# Load in the packages
+library(fredr)
+library(quantmod)
+library(readr)
+library(xts)
+library(lubridate)
+library(ggplot2)
+library(dplyr)
+```
+
+
+## Import and Clean Data
+
+We will be collecting data from three different sources here. First, we'll import the monthly returns for the Numerai One and Numerai Supreme hedge funds from the [Numerai Fund website](https://numerai.fund/). Second, we'll import the monthly returns for the S&P 500 index from the [FRED website](https://fred.stlouisfed.org/). Lastly, we'll import the monthly returns for the Numeraire (NMR) token and Ether (ETH) from [Yahoo Finance](https://finance.yahoo.com/) via the quantmod package. The code below will import the data from each of these sources and clean it up for analysis.
+
+### Numerai Hedge Fund Performance Data
+
+Due to their classification as hedge funds, there is far less publicly-available information compared to mutual funds or ETFs. However, since Numerai self-publishes data for monthly fund returns on their webpage, we can make use of this to examine the performance and test their claim of investing with a market-neutral strategy. To find the url for the code chunk below, go to the main [fund website](https://numerai.fund/) and right-click on "Download Performance" and select "Copy link address." If you left-click on the link, most browsers will simply attempt to download the current csv file. However, we can incorporate the static url into our script here and access the csv with `read_csv()`. This should retrieve all the most recent data each time this code is run.
+
+```{r importnmr}
+url = "https://api-financial.numer.ai/get_lp_performance_csv"
+fundrets = read_csv(url, show_col_types=FALSE)
+```
+
+Now, let's take the monthly returns from the data and convert them to an xts object of annualized percentages. Take note of the date conversion in the `order.by` parameter. Since these dates are the last day of each month, we add one date and subtract one month to convert the date to the first day of each respective month. This is in anticipation of merging with the FRED data that will be imported below, which uses dates at the beginning of each month.
+
+```{r nmrxts}
+nmr = data.frame(nmr_one=fundrets$numerai_one_monthly_return_net_of_fees*12*100,
+                     nmr_sup=fundrets$supreme_monthly_return_net_of_fees*12*100)
+nmr = xts(nmr,
+          order.by=fundrets$month_end_date + days(1) - months(1))
+```
+
+For the Numerai Supreme Fund, the data shows a 0% return prior to the launch of the fund in August 2022. To avoid the models from actually interpreting a 0% return, let's replace those 0's with missing values `NA`. The xts package makes this easier by allowing us to index by time. The `"/2022-07-01"` in the square brackets specifies the rows corresponding to dates up to and including July 2022.
+
+```{r nmrsupclean}
+nmr$nmr_sup["/2022-07-01"] = NA
+```
+
+Then to simplify the download of the FRED data, let's save the date of the earliest observation to `startdate`. This will help us only download the data that we will actually need for the analysis. Then, `startdate_1` will go back one additional month for the FRED download since we will lose an observation due to differencing. Similarly, `startdate_2` will go back two months from `startdate`, which is what downloads the correct amount of data for the crypto assets.
+
+```{r nmrstart}
+startdate = min(fundrets$month_end_date)
+startdate_1 = startdate %m-% months(1)
+startdate_2 = startdate %m-% months(2)
+```
+
+
+### FRED Data Import
+
+To access the FRED API, you must first create an account and [request an API key](https://fred.stlouisfed.org/docs/api/api_key.html). If you wish to run the code and replicate the results, you'll need to make an account, generate your own API key, and run this command un-commented with your key in place of the placeholder text. 
+
+```{r setkey}
+#fredr_set_key("<YOUR-FRED-API-KEY>")
+```
+
+Using the `fredr()` function, we will import the 10-year Treasury note yields. This is a typical proxy for the risk-free return when applying CAPM and calculating stock betas. The Sys.Date function is simply using the computer's current time to get the most up-to-date data.
+
+```{r freddata}
+RFraw = fredr(
+  series_id = "DGS10",
+  observation_start = startdate,
+  observation_end = as.Date(Sys.Date()),
+  frequency = "m"
+)
+INFraw = fredr(
+  series_id = "CPIAUCSL",
+  observation_start = startdate_1,
+  observation_end = as.Date(Sys.Date()),
+  frequency = "m"
+)
+SPraw = fredr(
+  series_id = "SP500",
+  observation_start = startdate_1,
+  observation_end = as.Date(Sys.Date()),
+  frequency = "m"
+)
+```
+
+Next, calculate the inflation rates from the CPI and merge those annualized growth rates to the merged data frame.
+
+```{r infxts}
+INF = xts(INFraw,order.by=INFraw$date)
+colnames(INF)[colnames(INF)=="value"] = "CPI"
+INF = subset(INF,select=-c(date,series_id,realtime_start,realtime_end))
+INF$INFmonthly = log(as.numeric(INF$CPI)) - log(as.numeric(lag(INF$CPI)))
+INF$inf = INF$INFmonthly*12*100
+```
+
+Now convert the S&P 500 index levels into annualized market returns and merge to `ALL`.
+
+```{r spxts}
+SP500 = xts(SPraw,order.by=SPraw$date)
+colnames(SP500)[colnames(SP500)=="value"] = "SP500"
+SP500 = subset(SP500,select=-c(date,series_id,realtime_start,realtime_end))
+SP500$SPmonthly = log(as.numeric(SP500$SP500)) - log(as.numeric(lag(SP500$SP500)))
+SP500$sp500 = SP500$SPmonthly*12*100
+```
+
+### NMR and ETH Price Data
+
+In addition to the Numerai Fund data, let's also import the price data for the Numeraire (NMR) token and Ether (ETH), which is the native token of the Ethereum blockchain that NMR transacts on. 
+
+```{r cryptodata, results='hide'}
+tickers = c("ETH-USD",
+            "NMR-USD")
+getSymbols(tickers,
+           src="yahoo",
+           from=startdate_2,
+           to=Sys.Date(),
+           periodicity="monthly")
+```
+
+First, we'll give the crypto data names that do not have a special character (`-`), then we'll compute the continuously compounded annual returns for the monthly data series.
+
+```{r cleancrypto}
+ETH = `ETH-USD`
+NMR = `NMR-USD`
+# Compute returns
+ETH$Return = c(NA, diff(log(as.numeric(ETH$`ETH-USD.Adjusted`))))
+NMR$Return = c(NA, diff(log(as.numeric(NMR$`NMR-USD.Adjusted`))))
+# Annualize returns
+ETH$ETH = ETH$Return*12*100
+NMR$NMR = NMR$Return*12*100
+```
+
+### Merging and Cleaning
+
+Now, let's merge all these variables to a single data frame named `ALL`.
+
+```{r merge}
+ALL = xts(RFraw,order.by=RFraw$date)
+colnames(ALL)[colnames(ALL)=="value"] = "rf"
+ALL = subset(ALL,select=-c(date,series_id,realtime_start,realtime_end))
+ALL = merge(ALL,
+            INF$inf,
+            SP500$sp500,
+            nmr$nmr_one,
+            nmr$nmr_sup,
+            NMR$NMR,
+            ETH$ETH)
+```
+
+Then the last cleaning step is to remove any missing values. The `complete.cases()` function returns the indices (rows) of observations with no missing values.
+
+```{r finalcleaning}
+ntrim = sum(!complete.cases(tail(ALL)))
+FINAL = ALL[2:(nrow(ALL)-ntrim),]
+```
+
+
+## Data Summaries and Plots
+
+When summarizing and visualizing the asset returns, we'll begin with the nominal returns. Then we'll examine the real (inflation-adjusted) return series. Lastly, we'll convert each of those return series into risk premiums, resulting in a nominal risk premium and a real risk premium. Then we can compare those two sets of results to see the impact of inflation on the observed relationships.
+
+### Nominal Returns
+
+Let's first take a look at what each time series looks like:
+
+```{r plots}
+ggplot(FINAL,aes(x=Index,y=rf))+
+  geom_col()+
+  ggtitle("Risk-Free Asset Returns")
+ggplot(FINAL,aes(x=Index,y=inf))+
+  geom_col()+
+  ggtitle("Annualized Inflation Rates")
+ggplot(FINAL,aes(x=Index,y=sp500))+
+  geom_col()+
+  ggtitle("S&P 500 Returns")
+ggplot(FINAL,aes(x=Index,y=nmr_one))+
+  geom_col()+
+  ggtitle("Numerai One Returns")
+ggplot(FINAL,aes(x=Index,y=nmr_sup))+
+  geom_col()+
+  ggtitle("Numerai Supreme Returns")
+ggplot(FINAL,aes(x=Index,y=NMR))+
+  geom_col()+
+  ggtitle("Numeraire (NMR) Returns")
+ggplot(FINAL,aes(x=Index,y=ETH))+
+  geom_col()+
+  ggtitle("Ether (ETH) Returns")
+```
+
+Next, let's calculate the average annual return (mean) and volatility (standard deviation).
+
+```{r expret}
+Er_nom = colMeans(FINAL,na.rm=TRUE)
+Er_nom |> round(2)
+```
+
+```{r volatilities}
+sigma_nom = apply(FINAL,2,sd,na.rm=TRUE)
+sigma_nom |> round(2)
+```
+
+Then let's compare the correlations across all these asset returns:
+
+```{r corr}
+Rho = cor(FINAL, use="pairwise.complete.obs")
+Rho |> round(2)
+```
+
+
+### Real Returns
+
+To calculate real returns from the nominal returns, we must subtract the inflation rate, and then divide the difference by the quantity of (1+inflation). Note that the inflation percentage must be divided by 100 to convert back to a decimal.
+
+```{r realrets}
+REAL = xts(order.by=index(FINAL))
+REAL$rf = (FINAL$rf-FINAL$inf)/(1+(FINAL$inf/100))
+REAL$sp500 = (FINAL$sp500-FINAL$inf)/(1+(FINAL$inf/100))
+REAL$nmr_one = (FINAL$nmr_one-FINAL$inf)/(1+(FINAL$inf/100))
+REAL$nmr_sup = (FINAL$nmr_sup-FINAL$inf)/(1+(FINAL$inf/100))
+REAL$NMR = (FINAL$NMR-FINAL$inf)/(1+(FINAL$inf/100))
+REAL$ETH = (FINAL$ETH-FINAL$inf)/(1+(FINAL$inf/100))
+```
+
+Now let's compare the means, standard deviations, and correlations for these inflation-adjusted return series:
+
+```{r realstats}
+Er_real = colMeans(REAL,na.rm=TRUE)
+Er_real |> round(2)
+sigma_real = apply(REAL,2,sd,na.rm=TRUE)
+sigma_real |> round(2)
+Rho_real = cor(REAL, use="pairwise.complete.obs")
+Rho_real |> round(2)
+```
+
+### Risk Premiums
+
+Then to normalize risk by the risk-free rate, we can difference each return series by the risk-free rate to compute risk premiums (or excess returns). This can be done with the nominal returns or the real returns. So let's do each and compare how inflation-adjusting the returns impacts the results.
+
+```{r excessretsnom}
+XSnom = xts(order.by=index(FINAL))
+XSnom$sp500 = FINAL$sp500-FINAL$rf
+XSnom$nmr_one = FINAL$nmr_one-FINAL$rf
+XSnom$nmr_sup = FINAL$nmr_sup-FINAL$rf
+XSnom$NMR = FINAL$NMR-FINAL$rf
+XSnom$ETH = FINAL$ETH-FINAL$rf
+```
+
+```{r excessretsreal}
+XSreal = xts(order.by=index(REAL))
+XSreal$sp500 = REAL$sp500-REAL$rf
+XSreal$nmr_one = REAL$nmr_one-REAL$rf
+XSreal$nmr_sup = REAL$nmr_sup-REAL$rf
+XSreal$NMR = REAL$NMR-REAL$rf
+XSreal$ETH = REAL$ETH-REAL$rf
+```
+
+For each set of risk premiums, let's compute the average annual returns and volatilities, as well as the correlation matrices to see how much the fund returns co-move with the market returns of the S&P 500.
+
+```{r excessstats}
+xsEr_nom = colMeans(XSnom, na.rm=TRUE)
+xsEr_nom |> round(2)
+xssigma_nom = apply(XSnom, 2, sd, na.rm=TRUE)
+xssigma_nom |> round(2)
+xsRho_nom = cor(XSnom, use="pairwise.complete.obs")
+xsRho_nom |> round(2)
+
+xsEr_real = colMeans(XSreal, na.rm=TRUE)
+xsEr_real |> round(2)
+xssigma_real = apply(XSreal, 2, sd, na.rm=TRUE)
+xssigma_real |> round(2)
+xsRho_real = cor(XSreal, use="pairwise.complete.obs")
+xsRho_real |> round(2)
+```
+
+
+## Sharpe Ratios and CAPM Betas
+
+From the risk premiums, we can easily compute the Sharpe ratio of the S&P 500 and the Numerai One hedge fund to compare risk-adjusted returns.
+
+```{r sharpes}
+sharpes_nom = xsEr_nom/xssigma_nom
+sharpes_nom |> round(2)
+
+sharpes_real = xsEr_real/xssigma_real
+sharpes_real |> round(2)
+```
+
+### Numerai One
+
+To estimate the fund's alpha and beta from CAPM, we'll run a linear regression model of each set of fund risk premiums on the market risk premium. The p-value (`Pr(>|t|)`) for the beta (`sp500`) estimate is for a statistical test where the null hypothesis is that the fund has a beta of zero. This property of a zero beta corresponds with a strategy of market neutrality. In other words, if the market goes up or down by any amount, the expected return of the fund should be unchanged. The alpha (intercept) estimate then indicates the beta-neutral performance of the fund. As of January 2024, the beta estimate for Numerai One is 0.03 in both nominal and real units. With t-stats under 0.5 for those estimates, this lack of statistical significance provides good evidence in support of their claim to invest with a market-neutral strategy. The alpha estimates are a little over 2% in both nominal and real units suggesting a modest return. In both cases, the $R^2$ of is fairly small (<1%), which also follows well given the claim of market-neutrality.
+
+```{r nmronecapm}
+NMR_one_fit_nom = lm(nmr_one~sp500,data=XSnom)
+summary(NMR_one_fit_nom)
+ggplot(XSnom,aes(x=sp500,y=nmr_one))+
+  geom_point()+
+  geom_smooth(method="lm")
+
+NMR_one_fit_real = lm(nmr_one~sp500,data=XSreal)
+summary(NMR_one_fit_real)
+ggplot(XSreal,aes(x=sp500,y=nmr_one))+
+  geom_point()+
+  geom_smooth(method="lm")
+```
+
+### Numerai Supreme
+
+As of January 2024, there are still just a few observations for the Numerai Supreme fund. We'll build out this discussion as we get more data. But for now, the beta estimates and $R^2$ values are similarly small and insignificant. However, the alpha is quite negative suggesting that the fund has struggled to deliver positive returns from its market-neutral strategy.
+
+```{r nmrsupcapm}
+NMR_sup_fit_nom = lm(nmr_sup~sp500,data=XSnom)
+summary(NMR_sup_fit_nom)
+ggplot(XSnom,aes(x=sp500,y=nmr_sup))+
+  geom_point()+
+  geom_smooth(method="lm")
+
+NMR_sup_fit_real = lm(nmr_sup~sp500,data=XSreal)
+summary(NMR_sup_fit_real)
+ggplot(XSreal,aes(x=sp500,y=nmr_sup))+
+  geom_point()+
+  geom_smooth(method="lm")
+```
+
+### Numeraire (NMR) token
+
+For the NMR token, we get some interesting results with the negative beta estimates, and the alpha estimates are quite large as well. However, the $R^2$ values are very small. So the bigger take away is that there isn't much of a relationship here.
+
+```{r nmrcapm}
+NMR_fit_nom = lm(NMR~sp500,data=XSnom)
+summary(NMR_fit_nom)
+ggplot(XSnom,aes(x=sp500,y=NMR))+
+  geom_point()+
+  geom_smooth(method="lm")
+
+NMR_fit_real = lm(NMR~sp500,data=XSreal)
+summary(NMR_fit_real)
+ggplot(XSreal,aes(x=sp500,y=NMR))+
+  geom_point()+
+  geom_smooth(method="lm")
+```
+
+### Ether (ETH)
+
+Ether produces a similarly large alpha estimate. However, the beta estimate flips to a large, positive, and significant value. This suggests that ETH has a large degree of systematic risk with a reasonably strong relationship to the stock market. The *** in the p-value column indicates that this beta estimate is significantly different than 0 at the 1% level. However, a beta equal to 1 is also meaningful to determine whether there is more systematic risk than the market portfolio. Thus, you can subtract 1 from the beta estimate and divide by the Std. Error to get a t-stat for the null hypothesis that the beta is equal to 1.
+
+```{r ethcapm}
+ETH_fit_nom = lm(ETH~sp500,data=XSnom)
+summary(ETH_fit_nom)
+ggplot(XSnom,aes(x=sp500,y=ETH))+
+  geom_point()+
+  geom_smooth(method="lm")
+
+ETH_fit_real = lm(ETH~sp500,data=XSreal)
+summary(ETH_fit_real)
+ggplot(XSreal,aes(x=sp500,y=ETH))+
+  geom_point()+
+  geom_smooth(method="lm")
+```
+
+## Multi-Factor Models
+
+Let's try to incorporate some additional factors into the model to see if we can improve the explanatory power.
+
+### ETH-Factor Models
+
+First, let's try to incorporate the ETH risk premium as an additional factor beyond the market risk premium.
+
+```{r ethfactor}
+nmr_one_fit2_nom = lm(nmr_one~sp500+ETH,data=XSnom)
+summary(nmr_one_fit2_nom)
+
+nmr_one_fit2_real = lm(nmr_one~sp500+ETH,data=XSreal)
+summary(nmr_one_fit2_real)
+
+nmr_sup_fit2_nom = lm(nmr_sup~sp500+ETH,data=XSnom)
+summary(nmr_sup_fit2_nom)
+
+nmr_sup_fit2_real = lm(nmr_sup~sp500+ETH,data=XSreal)
+summary(nmr_sup_fit2_real)
+
+NMR_fit2_nom = lm(NMR~sp500+ETH,data=XSnom)
+summary(NMR_fit2_nom)
+
+NMR_fit2_real = lm(NMR~sp500+ETH,data=XSreal)
+summary(NMR_fit2_real)
+```
+
+### NMR-Factor Models
+
+Then another factor we can try to incorporate into the model is the various Numerai assets. In other words, let's see if the NMR token returns help explain the fund returns.
+
+```{r nmrfactor}
+num_one_fit3_nom = lm(nmr_one~sp500+ETH+NMR,data=XSnom)
+summary(num_one_fit3_nom)
+
+num_one_fit3_real = lm(nmr_one~sp500+ETH+NMR,data=XSreal)
+summary(num_one_fit3_real)
+
+num_sup_fit3_nom = lm(nmr_sup~sp500+ETH+NMR,data=XSnom)
+summary(num_sup_fit3_nom)
+
+num_sup_fit3_real = lm(nmr_sup~sp500+ETH+NMR,data=XSreal)
+summary(num_sup_fit3_real)
+```
+
+### Fama/French Research Factors
+
+A popular asset pricing model in the finance literature has been the factor models from [Fama and French (1993)](https://doi.org/10.1016/0304-405X(93)90023-5), which introduced a three-factor model that includes SMB (Small Minus Big) as a 'size' factor and HML (High Minus Low) as a 'value'/'growth' factor. See [the 3-Factors webpage](https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/Data_Library/f-f_factors.html) for more detail. Additionally the more recent [Fama and French (2015)](https://doi.org/10.1016/j.jfineco.2014.10.010) includes two additional factors: RMW (Robust Minus Weak) as a 'profitability' factor and CMA (Conservative Minus Aggressive) factor. The [5-Factors webpage](https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/Data_Library/f-f_5_factors_2x3.html) has more detail. The codes below import the factor data from the website and conduct those regressions on the Numerai returns.
+
+```{r ff3}
+ff3url = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_CSV.zip"
+# Create subdirectory for file downloads
+subdirectory = "Factor Data"
+dir.create(subdirectory, showWarnings=FALSE)
+# Define the file paths
+zip_filepath = file.path(subdirectory, "FF3-factors.zip")
+csv_filepath = file.path(subdirectory, "FF3-factors.csv")
+# Download the zip file
+download.file(ff3url, destfile=zip_filepath)
+# Extract the CSV file from the zip file
+unzip(zip_filepath, exdir=subdirectory)
+file.rename("Factor Data/F-F_Research_Data_Factors.CSV", csv_filepath)
+FF3 = read_csv(csv_filepath,
+               col_types = cols(...1 = col_date(format = "%Y%m")), 
+               skip = 2)
+FF3 = FF3 |> rename(Date=...1)
+# Trim annual observations from bottom of date frame (dates import as missing)
+FF3 = FF3[complete.cases(FF3),]
+# Reformat to xts object
+FF3xts = xts(FF3[,-1], order.by=FF3$Date)
+# Remove data prior to first BTC observation
+FF3xts = FF3xts[paste(startdate,"/",sep="")]
+```
+
+```{r ff3regs}
+# Compile data frame of annualized crypto returns (un-annualize)
+assets_ff3 = merge(XSreal,
+                   FF3xts*12)
+#assets_ff3 = assets_ff3[complete.cases(assets_ff3),]
+# Compute average annual returns, volatility, and correlations
+Er_ff3 = colMeans(assets_ff3,na.rm=TRUE)
+Er_ff3 |> round(2)
+sd_ff3 = apply(assets_ff3,2,sd,na.rm=TRUE)
+sd_ff3 |> round(2)
+Sharpe_ff3 = Er_ff3/sd_ff3
+Sharpe_ff3 |> round(2)
+cor(assets_ff3, use="pairwise.complete.obs") |> round(2)
+# FF3 regressions
+FF3reg_nmr_one = lm(nmr_one~Mkt.RF+SMB+HML, data=assets_ff3)
+summary(FF3reg_nmr_one)
+FF3reg_nmr_sup = lm(nmr_sup~Mkt.RF+SMB+HML, data=assets_ff3)
+summary(FF3reg_nmr_sup)
+FF3reg_NMR = lm(NMR~Mkt.RF+SMB+HML, data=assets_ff3)
+summary(FF3reg_NMR)
+FF3reg_ETH = lm(ETH~Mkt.RF+SMB+HML, data=assets_ff3)
+summary(FF3reg_ETH)
+```
+
+```{r ff5}
+ff5url = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_CSV.zip"
+# Define the file paths
+zip_filepath = file.path(subdirectory, "FF5-factors.zip")
+csv_filepath = file.path(subdirectory, "FF5-factors.csv")
+# Download the zip file
+download.file(ff5url, destfile=zip_filepath)
+# Extract the CSV file from the zip file
+unzip(zip_filepath, exdir=subdirectory)
+file.rename("Factor Data/F-F_Research_Data_5_Factors_2x3.CSV", csv_filepath)
+FF5 = read_csv(csv_filepath,
+               col_types = cols(...1 = col_date(format = "%Y%m")), 
+               skip = 2)
+FF5 = FF5 |> rename(Date=...1)
+# Trim annual observations from bottom of date frame (dates import as missing)
+FF5 = FF5[complete.cases(FF5),]
+# For some reason, the factors are importing as characters, so this will fix those
+FF5$`Mkt-RF` = as.numeric(FF5$`Mkt-RF`)*12
+FF5$SMB = as.numeric(FF5$SMB)*12
+FF5$HML = as.numeric(FF5$HML)*12
+FF5$RMW = as.numeric(FF5$RMW)*12
+FF5$CMA = as.numeric(FF5$CMA)*12
+# Reformat to xts object
+FF5xts = xts(FF5[,-1], order.by=FF5$Date)
+# Remove data prior to first BTC observation
+FF5xts = FF5xts[paste(startdate,"/",sep="")]
+```
+
+```{r ff5regs}
+# Compile data frame of annualized crypto returns (un-annualize)
+assets_ff5 = merge(XSreal, FF5xts)
+#assets_ff5 = assets_ff5[complete.cases(assets_ff5),]
+# Compute average annual returns, volatility, and correlations
+Er_ff5 = colMeans(assets_ff5,na.rm=TRUE)
+Er_ff5 |> round(2)
+sd_ff5 = apply(assets_ff5,2,sd,na.rm=TRUE)
+sd_ff5 |> round(2)
+Sharpe_ff5 = Er_ff5/sd_ff5
+Sharpe_ff5 |> round(2)
+cor(assets_ff5, use="pairwise.complete.obs") |> round(2)
+# FF3 regressions
+FF5reg_nmr_one = lm(nmr_one~Mkt.RF+SMB+HML+RMW+CMA, data=assets_ff5)
+summary(FF5reg_nmr_one)
+FF5reg_nmr_sup = lm(nmr_sup~Mkt.RF+SMB+HML+RMW+CMA, data=assets_ff5)
+summary(FF5reg_nmr_sup)
+FF5reg_NMR = lm(NMR~Mkt.RF+SMB+HML+RMW+CMA, data=assets_ff5)
+summary(FF5reg_NMR)
+FF5reg_ETH = lm(ETH~Mkt.RF+SMB+HML+RMW+CMA, data=assets_ff5)
+summary(FF5reg_ETH)
+```
+
+
