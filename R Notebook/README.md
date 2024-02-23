@@ -1,11 +1,44 @@
 Numerai Financial Analysis
 ================
-Last updated: 2024-01-20
+Last updated: 2024-02-23
 
 ## Preliminary Work: Install/Load Packages
 
-Below is a list of R packages that will be used throughout this R
-Notebook.
+To try and ensure that this R Notebook will run successfully, we’ll use
+the [renv
+package](https://cran.r-project.org/web/packages/renv/index.html) to
+create a project-specific library of packages. This will allow us to
+install the packages that we need for this project without affecting any
+other projects that we may be working on. Additionally, the project
+library will track the specific versions of the dependency packages so
+that any updates to those packages will not break this project.
+
+The code chunk below will first install the renv package if it is not
+already installed. Then we will load the package. Next, we’ll use the
+`restore()` function to install any packages listed in the renv.lock
+file. Once these packages are installed, we can load them into the R
+session using the `library()` commands. Below the code chunk, we’ll list
+out the packages that will be used in the project demo. And if you run
+into any trouble using renv, then you can use the second code chunk
+below and that should be an even more reliable approach to install the
+required packages.
+
+``` r
+# Install renv package if not already installed
+if(!"renv" %in% installed.packages()[,"Package"]) install.packages("renv")
+# Load renv package
+library(renv)
+# Use restore() to install any packages listed in the renv.lock file
+renv::restore(clean=TRUE, lockfile="../renv.lock")
+# Load in the packages
+library(fredr)
+library(quantmod)
+library(readr)
+library(xts)
+library(lubridate)
+library(ggplot2)
+library(dplyr)
+```
 
 - The [fredr package](https://cran.r-project.org/package=fredr) is an R
   package that wraps the FRED API for easy importing of FRED data into
@@ -25,9 +58,61 @@ Notebook.
 - The [dplyr package](https://cran.r-project.org/package=dplyr) contains
   tools for data manipulation.
 
+Since the rmarkdown functionality is built into RStudio, this one is
+automatically loaded when we open the RStudio. So no need to use the
+`library()` function for this one. Another observation to make about the
+code chunk above is that it is labeled as ‘setup’, which is a special
+name, which the R Notebook will recognize and automatically run prior to
+running any other code chunk. This is useful for loading in packages and
+setting up other global options that will be used throughout the
+notebook.
+
+Then if you wish to try and update the versions of the various R
+packages in the lock file, you can use the `renv::update()` function to
+update the packages in the project library. However, it is possible that
+these updates could break the code in this notebook. If so, you may need
+to adapt the code to work with the updated packages.
+
+My recommendation is to first run through the code using the versions of
+the packages in the lock file. Then if you want to try and update the
+packages, you can do so and then run through the code again to see if it
+still works. If not, you can always revert back to the lock file
+versions using the `renv::restore()` function.
+
+If you update the packages and get everything working successfully, then
+you can update the lock file using the `renv::snapshot()` function. This
+will update the lock file with the versions of the packages that are
+currently installed in the project library. Then you can commit the
+updated lock file to the repository so that others can use the updated
+versions of the packages.
+
+### Alternative Package Installation Code
+
+If you run into any trouble using renv in the code chunk above, then you
+can use the code chunk below to install the required packages for this
+analysis. This method will first check if you have already installed the
+packages. If any are missing, it will then install them. Then it will
+load the packages into the R session. A potential flaw in this approach
+compared to using renv is that it will simply install the latest
+versions of the packages, which could potentially break some of the code
+in this notebook if any of the updates aren’t backwards compatible.
+
+As long as you have downloaded the entire project repository, the renv
+chunk above will likely be managing the packages. Thus, the `eval=FALSE`
+option is used to prevent this chunk from running unless manually
+executed. So if you only downloaded this one Rmd file, this code chunk
+should take care of installing the packages for you.
+
 ``` r
 # Create list of packages needed for this exercise
-list.of.packages = c("fredr","quantmod","readr","xts","lubridate","ggplot2","dplyr","rmarkdown")
+list.of.packages = c("fredr",
+                     "quantmod",
+                     "readr",
+                     "xts",
+                     "lubridate",
+                     "ggplot2",
+                     "dplyr",
+                     "rmarkdown")
 # Check if any have not yet been installed
 new.packages = list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 # If any need to be installed, install them
@@ -35,73 +120,12 @@ if(length(new.packages)) install.packages(new.packages)
 # Load in the packages
 library(fredr)
 library(quantmod)
-```
-
-    ## Loading required package: xts
-
-    ## Loading required package: zoo
-
-    ## 
-    ## Attaching package: 'zoo'
-
-    ## The following objects are masked from 'package:base':
-    ## 
-    ##     as.Date, as.Date.numeric
-
-    ## Loading required package: TTR
-
-    ## Registered S3 method overwritten by 'quantmod':
-    ##   method            from
-    ##   as.zoo.data.frame zoo
-
-``` r
 library(readr)
 library(xts)
 library(lubridate)
-```
-
-    ## 
-    ## Attaching package: 'lubridate'
-
-    ## The following objects are masked from 'package:base':
-    ## 
-    ##     date, intersect, setdiff, union
-
-``` r
 library(ggplot2)
 library(dplyr)
 ```
-
-    ## 
-    ## ######################### Warning from 'xts' package ##########################
-    ## #                                                                             #
-    ## # The dplyr lag() function breaks how base R's lag() function is supposed to  #
-    ## # work, which breaks lag(my_xts). Calls to lag(my_xts) that you type or       #
-    ## # source() into this session won't work correctly.                            #
-    ## #                                                                             #
-    ## # Use stats::lag() to make sure you're not using dplyr::lag(), or you can add #
-    ## # conflictRules('dplyr', exclude = 'lag') to your .Rprofile to stop           #
-    ## # dplyr from breaking base R's lag() function.                                #
-    ## #                                                                             #
-    ## # Code in packages is not affected. It's protected by R's namespace mechanism #
-    ## # Set `options(xts.warn_dplyr_breaks_lag = FALSE)` to suppress this warning.  #
-    ## #                                                                             #
-    ## ###############################################################################
-
-    ## 
-    ## Attaching package: 'dplyr'
-
-    ## The following objects are masked from 'package:xts':
-    ## 
-    ##     first, last
-
-    ## The following objects are masked from 'package:stats':
-    ## 
-    ##     filter, lag
-
-    ## The following objects are masked from 'package:base':
-    ## 
-    ##     intersect, setdiff, setequal, union
 
 ## Import and Clean Data
 
@@ -343,7 +367,8 @@ ggplot(FINAL,aes(x=Index,y=nmr_sup))+
   ggtitle("Numerai Supreme Returns")
 ```
 
-    ## Warning: Removed 35 rows containing missing values (`position_stack()`).
+    ## Warning: Removed 35 rows containing missing values or values outside the scale range
+    ## (`geom_col()`).
 
 ![](README_files/figure-gfm/plots-5.png)<!-- -->
 
@@ -372,7 +397,7 @@ Er_nom |> round(2)
 ```
 
     ##      rf     inf   sp500 nmr_one nmr_sup     NMR     ETH 
-    ##    2.27    4.33   11.09    4.89   -5.04   33.74   59.59
+    ##    2.30    4.31   11.45    5.00   -3.84   32.98   58.48
 
 ``` r
 sigma_nom = apply(FINAL,2,sd,na.rm=TRUE)
@@ -380,7 +405,7 @@ sigma_nom |> round(2)
 ```
 
     ##      rf     inf   sp500 nmr_one nmr_sup     NMR     ETH 
-    ##    1.26    4.08   54.21   35.17   57.38  357.80  293.51
+    ##    1.28    4.11   53.75   34.84   55.90  354.39  290.79
 
 Then let’s compare the correlations across all these asset returns:
 
@@ -390,13 +415,13 @@ Rho |> round(2)
 ```
 
     ##            rf   inf sp500 nmr_one nmr_sup   NMR   ETH
-    ## rf       1.00  0.03 -0.10   -0.13    0.08 -0.10 -0.21
-    ## inf      0.03  1.00  0.00    0.17    0.17 -0.15 -0.22
-    ## sp500   -0.10  0.00  1.00    0.04   -0.01 -0.04  0.47
-    ## nmr_one -0.13  0.17  0.04    1.00    0.88 -0.15 -0.16
-    ## nmr_sup  0.08  0.17 -0.01    0.88    1.00  0.13 -0.20
-    ## NMR     -0.10 -0.15 -0.04   -0.15    0.13  1.00  0.22
-    ## ETH     -0.21 -0.22  0.47   -0.16   -0.20  0.22  1.00
+    ## rf       1.00  0.03 -0.09   -0.12    0.09 -0.10 -0.21
+    ## inf      0.03  1.00  0.00    0.15    0.17 -0.13 -0.21
+    ## sp500   -0.09  0.00  1.00    0.04    0.00 -0.04  0.47
+    ## nmr_one -0.12  0.15  0.04    1.00    0.88 -0.15 -0.16
+    ## nmr_sup  0.09  0.17  0.00    0.88    1.00  0.13 -0.20
+    ## NMR     -0.10 -0.13 -0.04   -0.15    0.13  1.00  0.22
+    ## ETH     -0.21 -0.21  0.47   -0.16   -0.20  0.22  1.00
 
 ### Real Returns
 
@@ -424,7 +449,7 @@ Er_real |> round(2)
 ```
 
     ##      rf   sp500 nmr_one nmr_sup     NMR     ETH 
-    ##   -1.82    6.60    0.46   -8.25   30.56   55.57
+    ##   -1.77    6.98    0.61   -6.99   29.62   54.41
 
 ``` r
 sigma_real = apply(REAL,2,sd,na.rm=TRUE)
@@ -432,7 +457,7 @@ sigma_real |> round(2)
 ```
 
     ##      rf   sp500 nmr_one nmr_sup     NMR     ETH 
-    ##    4.05   54.25   33.62   55.93  342.06  283.65
+    ##    4.06   53.79   33.37   54.48  339.20  280.87
 
 ``` r
 Rho_real = cor(REAL, use="pairwise.complete.obs")
@@ -440,12 +465,12 @@ Rho_real |> round(2)
 ```
 
     ##            rf sp500 nmr_one nmr_sup   NMR   ETH
-    ## rf       1.00  0.01   -0.10   -0.12  0.15  0.16
-    ## sp500    0.01  1.00    0.04   -0.02 -0.06  0.50
-    ## nmr_one -0.10  0.04    1.00    0.88 -0.14 -0.13
-    ## nmr_sup -0.12 -0.02    0.88    1.00  0.12 -0.21
-    ## NMR      0.15 -0.06   -0.14    0.12  1.00  0.22
-    ## ETH      0.16  0.50   -0.13   -0.21  0.22  1.00
+    ## rf       1.00  0.02   -0.08   -0.11  0.14  0.15
+    ## sp500    0.02  1.00    0.04   -0.01 -0.06  0.49
+    ## nmr_one -0.08  0.04    1.00    0.88 -0.14 -0.14
+    ## nmr_sup -0.11 -0.01    0.88    1.00  0.12 -0.22
+    ## NMR      0.14 -0.06   -0.14    0.12  1.00  0.22
+    ## ETH      0.15  0.49   -0.14   -0.22  0.22  1.00
 
 ### Risk Premiums
 
@@ -483,7 +508,7 @@ xsEr_nom |> round(2)
 ```
 
     ##   sp500 nmr_one nmr_sup     NMR     ETH 
-    ##    8.82    2.62   -8.89   31.47   57.32
+    ##    9.15    2.69   -7.70   30.68   56.18
 
 ``` r
 xssigma_nom = apply(XSnom, 2, sd, na.rm=TRUE)
@@ -491,7 +516,7 @@ xssigma_nom |> round(2)
 ```
 
     ##   sp500 nmr_one nmr_sup     NMR     ETH 
-    ##   54.35   35.35   57.34  357.93  293.78
+    ##   53.88   35.01   55.86  354.52  291.06
 
 ``` r
 xsRho_nom = cor(XSnom, use="pairwise.complete.obs")
@@ -499,11 +524,11 @@ xsRho_nom |> round(2)
 ```
 
     ##         sp500 nmr_one nmr_sup   NMR   ETH
-    ## sp500    1.00    0.05   -0.01 -0.04  0.48
+    ## sp500    1.00    0.05    0.00 -0.04  0.47
     ## nmr_one  0.05    1.00    0.88 -0.15 -0.15
-    ## nmr_sup -0.01    0.88    1.00  0.12 -0.20
+    ## nmr_sup  0.00    0.88    1.00  0.12 -0.20
     ## NMR     -0.04   -0.15    0.12  1.00  0.22
-    ## ETH      0.48   -0.15   -0.20  0.22  1.00
+    ## ETH      0.47   -0.15   -0.20  0.22  1.00
 
 ``` r
 xsEr_real = colMeans(XSreal, na.rm=TRUE)
@@ -511,7 +536,7 @@ xsEr_real |> round(2)
 ```
 
     ##   sp500 nmr_one nmr_sup     NMR     ETH 
-    ##    8.42    2.28   -8.79   32.38   57.39
+    ##    8.75    2.38   -7.62   31.39   56.18
 
 ``` r
 xssigma_real = apply(XSreal, 2, sd, na.rm=TRUE)
@@ -519,7 +544,7 @@ xssigma_real |> round(2)
 ```
 
     ##   sp500 nmr_one nmr_sup     NMR     ETH 
-    ##   54.36   34.26   56.22  341.47  283.02
+    ##   53.87   33.92   54.72  338.67  280.28
 
 ``` r
 xsRho_real = cor(XSreal, use="pairwise.complete.obs")
@@ -527,11 +552,11 @@ xsRho_real |> round(2)
 ```
 
     ##         sp500 nmr_one nmr_sup   NMR   ETH
-    ## sp500    1.00    0.05   -0.01 -0.07  0.49
+    ## sp500    1.00    0.05   -0.01 -0.07  0.48
     ## nmr_one  0.05    1.00    0.88 -0.15 -0.15
     ## nmr_sup -0.01    0.88    1.00  0.12 -0.21
-    ## NMR     -0.07   -0.15    0.12  1.00  0.21
-    ## ETH      0.49   -0.15   -0.21  0.21  1.00
+    ## NMR     -0.07   -0.15    0.12  1.00  0.22
+    ## ETH      0.48   -0.15   -0.21  0.22  1.00
 
 ## Sharpe Ratios and CAPM Betas
 
@@ -544,7 +569,7 @@ sharpes_nom |> round(2)
 ```
 
     ##   sp500 nmr_one nmr_sup     NMR     ETH 
-    ##    0.16    0.07   -0.15    0.09    0.20
+    ##    0.17    0.08   -0.14    0.09    0.19
 
 ``` r
 sharpes_real = xsEr_real/xssigma_real
@@ -552,7 +577,7 @@ sharpes_real |> round(2)
 ```
 
     ##   sp500 nmr_one nmr_sup     NMR     ETH 
-    ##    0.15    0.07   -0.16    0.09    0.20
+    ##    0.16    0.07   -0.14    0.09    0.20
 
 ### Numerai One
 
@@ -582,17 +607,17 @@ summary(NMR_one_fit_nom)
     ## lm(formula = nmr_one ~ sp500, data = XSnom)
     ## 
     ## Residuals:
-    ##     Min      1Q  Median      3Q     Max 
-    ## -125.67  -15.38   -0.12   20.30   75.13 
+    ##      Min       1Q   Median       3Q      Max 
+    ## -125.738  -15.059    1.328   19.836   75.048 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept)  2.35758    5.01145   0.470    0.640
-    ## sp500        0.02951    0.09188   0.321    0.749
+    ## (Intercept)  2.41985    4.92155   0.492    0.625
+    ## sp500        0.02991    0.09089   0.329    0.743
     ## 
-    ## Residual standard error: 35.66 on 50 degrees of freedom
-    ## Multiple R-squared:  0.00206,    Adjusted R-squared:  -0.0179 
-    ## F-statistic: 0.1032 on 1 and 50 DF,  p-value: 0.7494
+    ## Residual standard error: 35.31 on 51 degrees of freedom
+    ## Multiple R-squared:  0.002119,   Adjusted R-squared:  -0.01745 
+    ## F-statistic: 0.1083 on 1 and 51 DF,  p-value: 0.7435
 
 ``` r
 ggplot(XSnom,aes(x=sp500,y=nmr_one))+
@@ -615,16 +640,16 @@ summary(NMR_one_fit_real)
     ## 
     ## Residuals:
     ##      Min       1Q   Median       3Q      Max 
-    ## -123.532  -15.036    0.048   19.248   73.496 
+    ## -123.825  -15.074    1.334   18.648   72.871 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept)  2.01668    4.85028   0.416    0.679
-    ## sp500        0.03168    0.08901   0.356    0.723
+    ## (Intercept)  2.10310    4.76135   0.442    0.661
+    ## sp500        0.03215    0.08806   0.365    0.717
     ## 
-    ## Residual standard error: 34.56 on 50 degrees of freedom
-    ## Multiple R-squared:  0.002527,   Adjusted R-squared:  -0.01742 
-    ## F-statistic: 0.1267 on 1 and 50 DF,  p-value: 0.7234
+    ## Residual standard error: 34.21 on 51 degrees of freedom
+    ## Multiple R-squared:  0.002606,   Adjusted R-squared:  -0.01695 
+    ## F-statistic: 0.1333 on 1 and 51 DF,  p-value: 0.7166
 
 ``` r
 ggplot(XSreal,aes(x=sp500,y=nmr_one))+
@@ -656,17 +681,17 @@ summary(NMR_sup_fit_nom)
     ## 
     ## Residuals:
     ##      Min       1Q   Median       3Q      Max 
-    ## -141.865  -20.112    0.682   25.289  103.837 
+    ## -143.002  -19.528    2.238   23.529  102.166 
     ## 
     ## Coefficients:
-    ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept) -8.78195   14.64055  -0.600    0.558
-    ## sp500       -0.01183    0.31944  -0.037    0.971
+    ##              Estimate Std. Error t value Pr(>|t|)
+    ## (Intercept) -7.682466  13.908304  -0.552    0.588
+    ## sp500       -0.001668   0.309314  -0.005    0.996
     ## 
-    ## Residual standard error: 59.22 on 15 degrees of freedom
+    ## Residual standard error: 57.58 on 16 degrees of freedom
     ##   (35 observations deleted due to missingness)
-    ## Multiple R-squared:  9.138e-05,  Adjusted R-squared:  -0.06657 
-    ## F-statistic: 0.001371 on 1 and 15 DF,  p-value: 0.971
+    ## Multiple R-squared:  1.817e-06,  Adjusted R-squared:  -0.0625 
+    ## F-statistic: 2.908e-05 on 1 and 16 DF,  p-value: 0.9958
 
 ``` r
 ggplot(XSnom,aes(x=sp500,y=nmr_sup))+
@@ -676,9 +701,11 @@ ggplot(XSnom,aes(x=sp500,y=nmr_sup))+
 
     ## `geom_smooth()` using formula = 'y ~ x'
 
-    ## Warning: Removed 35 rows containing non-finite values (`stat_smooth()`).
+    ## Warning: Removed 35 rows containing non-finite outside the scale range
+    ## (`stat_smooth()`).
 
-    ## Warning: Removed 35 rows containing missing values (`geom_point()`).
+    ## Warning: Removed 35 rows containing missing values or values outside the scale range
+    ## (`geom_point()`).
 
 ![](README_files/figure-gfm/nmrsupcapm-1.png)<!-- -->
 
@@ -692,18 +719,18 @@ summary(NMR_sup_fit_real)
     ## lm(formula = nmr_sup ~ sp500, data = XSreal)
     ## 
     ## Residuals:
-    ##     Min      1Q  Median      3Q     Max 
-    ## -139.79  -19.54    0.98   23.94  101.78 
+    ##      Min       1Q   Median       3Q      Max 
+    ## -141.159  -19.136    2.294   22.404   99.449 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept)  -8.6247    14.3640  -0.600    0.557
-    ## sp500        -0.0187     0.3238  -0.058    0.955
+    ## (Intercept) -7.54441   13.63527  -0.553    0.588
+    ## sp500       -0.00742    0.31275  -0.024    0.981
     ## 
-    ## Residual standard error: 58.06 on 15 degrees of freedom
+    ## Residual standard error: 56.4 on 16 degrees of freedom
     ##   (35 observations deleted due to missingness)
-    ## Multiple R-squared:  0.0002223,  Adjusted R-squared:  -0.06643 
-    ## F-statistic: 0.003335 on 1 and 15 DF,  p-value: 0.9547
+    ## Multiple R-squared:  3.517e-05,  Adjusted R-squared:  -0.06246 
+    ## F-statistic: 0.0005628 on 1 and 16 DF,  p-value: 0.9814
 
 ``` r
 ggplot(XSreal,aes(x=sp500,y=nmr_sup))+
@@ -713,8 +740,10 @@ ggplot(XSreal,aes(x=sp500,y=nmr_sup))+
 
     ## `geom_smooth()` using formula = 'y ~ x'
 
-    ## Warning: Removed 35 rows containing non-finite values (`stat_smooth()`).
-    ## Removed 35 rows containing missing values (`geom_point()`).
+    ## Warning: Removed 35 rows containing non-finite outside the scale range
+    ## (`stat_smooth()`).
+    ## Removed 35 rows containing missing values or values outside the scale range
+    ## (`geom_point()`).
 
 ![](README_files/figure-gfm/nmrsupcapm-2.png)<!-- -->
 
@@ -736,16 +765,16 @@ summary(NMR_fit_nom)
     ## 
     ## Residuals:
     ##     Min      1Q  Median      3Q     Max 
-    ## -799.92 -233.35  -24.25  215.51 1180.12 
+    ## -799.68 -228.14  -26.36  202.84 1181.08 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept)  33.5976    50.7642   0.662    0.511
-    ## sp500        -0.2415     0.9307  -0.259    0.796
+    ## (Intercept)  32.9227    49.8541   0.660    0.512
+    ## sp500        -0.2457     0.9207  -0.267    0.791
     ## 
-    ## Residual standard error: 361.2 on 50 degrees of freedom
-    ## Multiple R-squared:  0.001345,   Adjusted R-squared:  -0.01863 
-    ## F-statistic: 0.06732 on 1 and 50 DF,  p-value: 0.7963
+    ## Residual standard error: 357.7 on 51 degrees of freedom
+    ## Multiple R-squared:  0.001395,   Adjusted R-squared:  -0.01819 
+    ## F-statistic: 0.07124 on 1 and 51 DF,  p-value: 0.7906
 
 ``` r
 ggplot(XSnom,aes(x=sp500,y=NMR))+
@@ -768,16 +797,16 @@ summary(NMR_fit_real)
     ## 
     ## Residuals:
     ##     Min      1Q  Median      3Q     Max 
-    ## -747.53 -230.86  -25.01  206.21 1131.00 
+    ## -747.19 -230.52  -32.19  194.27 1140.28 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept)  36.3087    48.2729   0.752    0.455
-    ## sp500        -0.4662     0.8859  -0.526    0.601
+    ## (Intercept)  35.3681    47.4765   0.745    0.460
+    ## sp500        -0.4546     0.8780  -0.518    0.607
     ## 
-    ## Residual standard error: 343.9 on 50 degrees of freedom
-    ## Multiple R-squared:  0.005508,   Adjusted R-squared:  -0.01438 
-    ## F-statistic: 0.2769 on 1 and 50 DF,  p-value: 0.6011
+    ## Residual standard error: 341.1 on 51 degrees of freedom
+    ## Multiple R-squared:  0.005229,   Adjusted R-squared:  -0.01428 
+    ## F-statistic: 0.2681 on 1 and 51 DF,  p-value: 0.6069
 
 ``` r
 ggplot(XSreal,aes(x=sp500,y=NMR))+
@@ -812,19 +841,19 @@ summary(ETH_fit_nom)
     ## lm(formula = ETH ~ sp500, data = XSnom)
     ## 
     ## Residuals:
-    ##    Min     1Q Median     3Q    Max 
-    ## -638.3 -183.3  -15.8  207.5  579.4 
+    ##     Min      1Q  Median      3Q     Max 
+    ## -637.01 -181.11  -13.69  209.23  581.68 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)  34.6541    36.6781   0.945 0.349296    
-    ## sp500         2.5704     0.6724   3.822 0.000367 ***
+    ## (Intercept)  32.7746    36.0741   0.909 0.367868    
+    ## sp500         2.5585     0.6662   3.840 0.000341 ***
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 261 on 50 degrees of freedom
-    ## Multiple R-squared:  0.2261, Adjusted R-squared:  0.2107 
-    ## F-statistic: 14.61 on 1 and 50 DF,  p-value: 0.0003669
+    ## Residual standard error: 258.8 on 51 degrees of freedom
+    ## Multiple R-squared:  0.2243, Adjusted R-squared:  0.2091 
+    ## F-statistic: 14.75 on 1 and 51 DF,  p-value: 0.000341
 
 ``` r
 ggplot(XSnom,aes(x=sp500,y=ETH))+
@@ -846,19 +875,19 @@ summary(ETH_fit_real)
     ## lm(formula = ETH ~ sp500, data = XSreal)
     ## 
     ## Residuals:
-    ##    Min     1Q Median     3Q    Max 
-    ## -566.6 -175.0  -16.2  203.3  562.5 
+    ##     Min      1Q  Median      3Q     Max 
+    ## -561.67 -171.80  -14.92  204.11  567.40 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)  36.1027    35.0752   1.029 0.308296    
-    ## sp500         2.5278     0.6437   3.927 0.000264 ***
+    ## (Intercept)  34.1425    34.4706   0.990  0.32661    
+    ## sp500         2.5187     0.6375   3.951  0.00024 ***
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 249.9 on 50 degrees of freedom
-    ## Multiple R-squared:  0.2357, Adjusted R-squared:  0.2204 
-    ## F-statistic: 15.42 on 1 and 50 DF,  p-value: 0.000264
+    ## Residual standard error: 247.6 on 51 degrees of freedom
+    ## Multiple R-squared:  0.2343, Adjusted R-squared:  0.2193 
+    ## F-statistic: 15.61 on 1 and 51 DF,  p-value: 0.0002401
 
 ``` r
 ggplot(XSreal,aes(x=sp500,y=ETH))+
@@ -891,17 +920,17 @@ summary(nmr_one_fit2_nom)
     ## 
     ## Residuals:
     ##      Min       1Q   Median       3Q      Max 
-    ## -126.997  -12.939   -2.205   19.104   70.247 
+    ## -127.010  -12.729   -0.758   19.031   70.235 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept)  3.28805    5.00774   0.657    0.515
-    ## sp500        0.09853    0.10345   0.952    0.346
-    ## ETH         -0.02685    0.01914  -1.403    0.167
+    ## (Intercept)  3.30050    4.91244   0.672    0.505
+    ## sp500        0.09866    0.10219   0.965    0.339
+    ## ETH         -0.02687    0.01892  -1.420    0.162
     ## 
-    ## Residual standard error: 35.32 on 49 degrees of freedom
-    ## Multiple R-squared:  0.0406, Adjusted R-squared:  0.001438 
-    ## F-statistic: 1.037 on 2 and 49 DF,  p-value: 0.3623
+    ## Residual standard error: 34.97 on 50 degrees of freedom
+    ## Multiple R-squared:  0.04083,    Adjusted R-squared:  0.00246 
+    ## F-statistic: 1.064 on 2 and 50 DF,  p-value: 0.3527
 
 ``` r
 nmr_one_fit2_real = lm(nmr_one~sp500+ETH,data=XSreal)
@@ -914,17 +943,17 @@ summary(nmr_one_fit2_real)
     ## 
     ## Residuals:
     ##      Min       1Q   Median       3Q      Max 
-    ## -124.911  -12.105   -1.956   18.397   65.199 
+    ## -125.158  -11.838   -0.715   18.237   64.947 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept)  3.00543    4.85309   0.619    0.539
-    ## sp500        0.10091    0.10082   1.001    0.322
-    ## ETH         -0.02739    0.01936  -1.414    0.164
+    ## (Intercept)  3.04412    4.75713    0.64    0.525
+    ## sp500        0.10157    0.09959    1.02    0.313
+    ## ETH         -0.02756    0.01914   -1.44    0.156
     ## 
-    ## Residual standard error: 34.21 on 49 degrees of freedom
-    ## Multiple R-squared:  0.04165,    Adjusted R-squared:  0.002537 
-    ## F-statistic: 1.065 on 2 and 49 DF,  p-value: 0.3526
+    ## Residual standard error: 33.85 on 50 degrees of freedom
+    ## Multiple R-squared:  0.04232,    Adjusted R-squared:  0.00401 
+    ## F-statistic: 1.105 on 2 and 50 DF,  p-value: 0.3393
 
 ``` r
 nmr_sup_fit2_nom = lm(nmr_sup~sp500+ETH,data=XSnom)
@@ -937,18 +966,18 @@ summary(nmr_sup_fit2_nom)
     ## 
     ## Residuals:
     ##      Min       1Q   Median       3Q      Max 
-    ## -143.667  -27.860   -2.151   39.215   84.252 
+    ## -144.743  -25.328    0.431   38.145   82.430 
     ## 
     ## Coefficients:
-    ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept) -7.38686   14.95751  -0.494    0.629
-    ## sp500       -0.01441    0.32395  -0.044    0.965
-    ## ETH         -0.07756    0.10122  -0.766    0.456
+    ##              Estimate Std. Error t value Pr(>|t|)
+    ## (Intercept) -6.350227  14.163927  -0.448    0.660
+    ## sp500       -0.005051   0.312853  -0.016    0.987
+    ## ETH         -0.078656   0.098095  -0.802    0.435
     ## 
-    ## Residual standard error: 60.05 on 14 degrees of freedom
+    ## Residual standard error: 58.23 on 15 degrees of freedom
     ##   (35 observations deleted due to missingness)
-    ## Multiple R-squared:  0.04034,    Adjusted R-squared:  -0.09676 
-    ## F-statistic: 0.2942 on 2 and 14 DF,  p-value: 0.7496
+    ## Multiple R-squared:  0.0411, Adjusted R-squared:  -0.08675 
+    ## F-statistic: 0.3215 on 2 and 15 DF,  p-value: 0.7299
 
 ``` r
 nmr_sup_fit2_real = lm(nmr_sup~sp500+ETH,data=XSreal)
@@ -960,19 +989,19 @@ summary(nmr_sup_fit2_real)
     ## lm(formula = nmr_sup ~ sp500 + ETH, data = XSreal)
     ## 
     ## Residuals:
-    ##      Min       1Q   Median       3Q      Max 
-    ## -141.678  -27.301   -0.849   37.880   81.416 
+    ##     Min      1Q  Median      3Q     Max 
+    ## -142.94  -24.72    0.91   36.97   79.26 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept) -7.15439   14.64937  -0.488    0.633
-    ## sp500       -0.02438    0.32774  -0.074    0.942
-    ## ETH         -0.08322    0.10332  -0.805    0.434
+    ## (Intercept) -6.18100   13.86296  -0.446    0.662
+    ## sp500       -0.01320    0.31584  -0.042    0.967
+    ## ETH         -0.08352    0.10006  -0.835    0.417
     ## 
-    ## Residual standard error: 58.75 on 14 degrees of freedom
+    ## Residual standard error: 56.95 on 15 degrees of freedom
     ##   (35 observations deleted due to missingness)
-    ## Multiple R-squared:  0.0445, Adjusted R-squared:  -0.092 
-    ## F-statistic: 0.326 on 2 and 14 DF,  p-value: 0.7271
+    ## Multiple R-squared:  0.04442,    Adjusted R-squared:  -0.08299 
+    ## F-statistic: 0.3486 on 2 and 15 DF,  p-value: 0.7112
 
 ``` r
 NMR_fit2_nom = lm(NMR~sp500+ETH,data=XSnom)
@@ -985,19 +1014,19 @@ summary(NMR_fit2_nom)
     ## 
     ## Residuals:
     ##     Min      1Q  Median      3Q     Max 
-    ## -732.03 -188.64  -32.01  142.56 1153.72 
+    ## -732.05 -184.81  -21.47  141.94 1153.69 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)  
-    ## (Intercept)  20.6549    49.8160   0.415   0.6802  
-    ## sp500        -1.2015     1.0291  -1.168   0.2486  
-    ## ETH           0.3735     0.1904   1.962   0.0555 .
+    ## (Intercept)  20.6835    48.8678   0.423   0.6739  
+    ## sp500        -1.2012     1.0165  -1.182   0.2429  
+    ## ETH           0.3734     0.1882   1.985   0.0527 .
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 351.4 on 49 degrees of freedom
-    ## Multiple R-squared:  0.07407,    Adjusted R-squared:  0.03627 
-    ## F-statistic:  1.96 on 2 and 49 DF,  p-value: 0.1518
+    ## Residual standard error: 347.8 on 50 degrees of freedom
+    ## Multiple R-squared:  0.07431,    Adjusted R-squared:  0.03728 
+    ## F-statistic: 2.007 on 2 and 50 DF,  p-value: 0.1451
 
 ``` r
 NMR_fit2_real = lm(NMR~sp500+ETH,data=XSreal)
@@ -1010,19 +1039,19 @@ summary(NMR_fit2_real)
     ## 
     ## Residuals:
     ##     Min      1Q  Median      3Q     Max 
-    ## -679.22 -180.77  -33.54  156.54 1104.61 
+    ## -678.70 -180.57  -31.93  153.64 1112.37 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)  
-    ## (Intercept)  22.0182    47.1948   0.467   0.6429  
-    ## sp500        -1.4668     0.9804  -1.496   0.1410  
-    ## ETH           0.3958     0.1883   2.102   0.0407 *
+    ## (Intercept)  21.7568    46.3357   0.470   0.6407  
+    ## sp500        -1.4587     0.9701  -1.504   0.1389  
+    ## ETH           0.3987     0.1864   2.138   0.0374 *
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 332.7 on 49 degrees of freedom
-    ## Multiple R-squared:  0.08777,    Adjusted R-squared:  0.05054 
-    ## F-statistic: 2.357 on 2 and 49 DF,  p-value: 0.1053
+    ## Residual standard error: 329.7 on 50 degrees of freedom
+    ## Multiple R-squared:  0.08857,    Adjusted R-squared:  0.05211 
+    ## F-statistic: 2.429 on 2 and 50 DF,  p-value: 0.09841
 
 ### NMR-Factor Models
 
@@ -1040,19 +1069,19 @@ summary(num_one_fit3_nom)
     ## lm(formula = nmr_one ~ sp500 + ETH + NMR, data = XSnom)
     ## 
     ## Residuals:
-    ##     Min      1Q  Median      3Q     Max 
-    ## -128.82  -11.36   -0.55   19.35   72.61 
+    ##      Min       1Q   Median       3Q      Max 
+    ## -128.837  -11.210    0.063   18.770   72.594 
     ## 
     ## Coefficients:
     ##              Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept)  3.493537   5.043618   0.693    0.492
-    ## sp500        0.086576   0.105442   0.821    0.416
-    ## ETH         -0.023134   0.019983  -1.158    0.253
-    ## NMR         -0.009949   0.014438  -0.689    0.494
+    ## (Intercept)  3.506274   4.946788   0.709    0.482
+    ## sp500        0.086705   0.104141   0.833    0.409
+    ## ETH         -0.023155   0.019749  -1.172    0.247
+    ## NMR         -0.009949   0.014290  -0.696    0.490
     ## 
-    ## Residual standard error: 35.51 on 48 degrees of freedom
-    ## Multiple R-squared:  0.04999,    Adjusted R-squared:  -0.009382 
-    ## F-statistic: 0.842 on 3 and 48 DF,  p-value: 0.4776
+    ## Residual standard error: 35.15 on 49 degrees of freedom
+    ## Multiple R-squared:  0.05022,    Adjusted R-squared:  -0.007929 
+    ## F-statistic: 0.8637 on 3 and 49 DF,  p-value: 0.4663
 
 ``` r
 num_one_fit3_real = lm(nmr_one~sp500+ETH+NMR,data=XSreal)
@@ -1065,18 +1094,18 @@ summary(num_one_fit3_real)
     ## 
     ## Residuals:
     ##      Min       1Q   Median       3Q      Max 
-    ## -126.755  -10.830   -0.456   17.753   67.476 
+    ## -127.013  -10.744    0.158   16.924   67.214 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept)  3.22905    4.89023   0.660    0.512
-    ## sp500        0.08602    0.10365   0.830    0.411
-    ## ETH         -0.02337    0.02033  -1.150    0.256
-    ## NMR         -0.01016    0.01477  -0.688    0.495
+    ## (Intercept)  3.26633    4.79212   0.682    0.499
+    ## sp500        0.08667    0.10234   0.847    0.401
+    ## ETH         -0.02349    0.02010  -1.169    0.248
+    ## NMR         -0.01021    0.01459  -0.700    0.487
     ## 
-    ## Residual standard error: 34.4 on 48 degrees of freedom
-    ## Multiple R-squared:  0.051,  Adjusted R-squared:  -0.008311 
-    ## F-statistic: 0.8599 on 3 and 48 DF,  p-value: 0.4684
+    ## Residual standard error: 34.03 on 49 degrees of freedom
+    ## Multiple R-squared:  0.0518, Adjusted R-squared:  -0.006258 
+    ## F-statistic: 0.8922 on 3 and 49 DF,  p-value: 0.4519
 
 ``` r
 num_sup_fit3_nom = lm(nmr_sup~sp500+ETH+NMR,data=XSnom)
@@ -1089,19 +1118,19 @@ summary(num_sup_fit3_nom)
     ## 
     ## Residuals:
     ##     Min      1Q  Median      3Q     Max 
-    ## -125.23  -36.14   21.14   29.82   93.70 
+    ## -126.18  -35.88   19.16   28.17   92.02 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept) -4.02055   14.69477  -0.274    0.789
-    ## sp500       -0.06100    0.31566  -0.193    0.850
-    ## ETH         -0.20048    0.13233  -1.515    0.154
-    ## NMR          0.13168    0.09518   1.383    0.190
+    ## (Intercept) -3.03486   13.88230  -0.219    0.830
+    ## sp500       -0.05235    0.30415  -0.172    0.866
+    ## ETH         -0.20191    0.12792  -1.578    0.137
+    ## NMR          0.13211    0.09205   1.435    0.173
     ## 
-    ## Residual standard error: 58.18 on 13 degrees of freedom
+    ## Residual standard error: 56.28 on 14 degrees of freedom
     ##   (35 observations deleted due to missingness)
-    ## Multiple R-squared:  0.1635, Adjusted R-squared:  -0.02954 
-    ## F-statistic: 0.847 on 3 and 13 DF,  p-value: 0.4925
+    ## Multiple R-squared:  0.1641, Adjusted R-squared:  -0.01505 
+    ## F-statistic: 0.916 on 3 and 14 DF,  p-value: 0.4584
 
 ``` r
 num_sup_fit3_real = lm(nmr_sup~sp500+ETH+NMR,data=XSreal)
@@ -1114,19 +1143,19 @@ summary(num_sup_fit3_real)
     ## 
     ## Residuals:
     ##     Min      1Q  Median      3Q     Max 
-    ## -123.02  -35.59   21.97   29.65   90.99 
+    ## -124.07  -35.07   19.41   28.03   88.79 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept) -3.80625   14.36439  -0.265    0.795
-    ## sp500       -0.07091    0.31864  -0.223    0.827
-    ## ETH         -0.20836    0.13386  -1.557    0.144
-    ## NMR          0.13490    0.09603   1.405    0.184
+    ## (Intercept) -2.89371   13.55139  -0.214    0.834
+    ## sp500       -0.05994    0.30614  -0.196    0.848
+    ## ETH         -0.20967    0.12937  -1.621    0.127
+    ## NMR          0.13559    0.09266   1.463    0.165
     ## 
-    ## Residual standard error: 56.81 on 13 degrees of freedom
+    ## Residual standard error: 54.9 on 14 degrees of freedom
     ##   (35 observations deleted due to missingness)
-    ## Multiple R-squared:  0.1704, Adjusted R-squared:  -0.02102 
-    ## F-statistic: 0.8902 on 3 and 13 DF,  p-value: 0.4721
+    ## Multiple R-squared:  0.1712, Adjusted R-squared:  -0.006421 
+    ## F-statistic: 0.9638 on 3 and 14 DF,  p-value: 0.4371
 
 ### Fama/French Research Factors
 
@@ -1197,7 +1226,7 @@ Er_ff3 |> round(2)
 ```
 
     ##   sp500 nmr_one nmr_sup     NMR     ETH  Mkt.RF     SMB     HML      RF 
-    ##    8.42    2.28   -8.79   32.38   57.39   11.84   -0.69   -0.27    1.61
+    ##    8.75    2.38   -7.62   31.39   56.18   12.75    0.81    0.90    1.68
 
 ``` r
 sd_ff3 = apply(assets_ff3,2,sd,na.rm=TRUE)
@@ -1205,7 +1234,7 @@ sd_ff3 |> round(2)
 ```
 
     ##   sp500 nmr_one nmr_sup     NMR     ETH  Mkt.RF     SMB     HML      RF 
-    ##   54.36   34.26   56.22  341.47  283.02   69.21   35.33   58.88    1.97
+    ##   53.87   33.92   54.72  338.67  280.28   68.82   36.59   58.88    2.01
 
 ``` r
 Sharpe_ff3 = Er_ff3/sd_ff3
@@ -1213,22 +1242,22 @@ Sharpe_ff3 |> round(2)
 ```
 
     ##   sp500 nmr_one nmr_sup     NMR     ETH  Mkt.RF     SMB     HML      RF 
-    ##    0.15    0.07   -0.16    0.09    0.20    0.17   -0.02    0.00    0.82
+    ##    0.16    0.07   -0.14    0.09    0.20    0.19    0.02    0.02    0.84
 
 ``` r
 cor(assets_ff3, use="pairwise.complete.obs") |> round(2)
 ```
 
     ##         sp500 nmr_one nmr_sup   NMR   ETH Mkt.RF   SMB   HML    RF
-    ## sp500    1.00    0.05   -0.01 -0.07  0.49   0.58  0.36  0.16 -0.07
-    ## nmr_one  0.05    1.00    0.88 -0.15 -0.15  -0.10 -0.17  0.20 -0.26
-    ## nmr_sup -0.01    0.88    1.00  0.12 -0.21  -0.21 -0.28  0.41 -0.22
-    ## NMR     -0.07   -0.15    0.12  1.00  0.21   0.07  0.10 -0.27 -0.01
-    ## ETH      0.49   -0.15   -0.21  0.21  1.00   0.64  0.32  0.00 -0.13
-    ## Mkt.RF   0.58   -0.10   -0.21  0.07  0.64   1.00  0.31  0.03 -0.07
-    ## SMB      0.36   -0.17   -0.28  0.10  0.32   0.31  1.00  0.01 -0.17
-    ## HML      0.16    0.20    0.41 -0.27  0.00   0.03  0.01  1.00 -0.15
-    ## RF      -0.07   -0.26   -0.22 -0.01 -0.13  -0.07 -0.17 -0.15  1.00
+    ## sp500    1.00    0.05   -0.01 -0.07  0.48   0.58  0.37  0.17 -0.04
+    ## nmr_one  0.05    1.00    0.88 -0.15 -0.15  -0.10 -0.18  0.19 -0.26
+    ## nmr_sup -0.01    0.88    1.00  0.12 -0.21  -0.22 -0.26  0.37 -0.23
+    ## NMR     -0.07   -0.15    0.12  1.00  0.22   0.08  0.12 -0.25  0.02
+    ## ETH      0.48   -0.15   -0.21  0.22  1.00   0.64  0.31  0.00 -0.12
+    ## Mkt.RF   0.58   -0.10   -0.22  0.08  0.64   1.00  0.32  0.04 -0.05
+    ## SMB      0.37   -0.18   -0.26  0.12  0.31   0.32  1.00  0.05 -0.09
+    ## HML      0.17    0.19    0.37 -0.25  0.00   0.04  0.05  1.00 -0.11
+    ## RF      -0.04   -0.26   -0.23  0.02 -0.12  -0.05 -0.09 -0.11  1.00
 
 ``` r
 # FF3 regressions
@@ -1242,19 +1271,19 @@ summary(FF3reg_nmr_one)
     ## 
     ## Residuals:
     ##      Min       1Q   Median       3Q      Max 
-    ## -110.248  -16.125   -2.204   22.471   67.410 
+    ## -110.364  -15.877   -2.962   20.979   66.729 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept)  2.93047    4.99369   0.587    0.560
-    ## Mkt.RF      -0.02776    0.07523  -0.369    0.714
-    ## SMB         -0.15330    0.14734  -1.040    0.304
-    ## HML          0.11882    0.08422   1.411    0.165
+    ## (Intercept)  2.82856    4.89303   0.578    0.566
+    ## Mkt.RF      -0.02812    0.07441  -0.378    0.707
+    ## SMB         -0.16055    0.14001  -1.147    0.257
+    ## HML          0.11714    0.08256   1.419    0.163
     ## 
-    ## Residual standard error: 34.7 on 46 degrees of freedom
+    ## Residual standard error: 34.32 on 47 degrees of freedom
     ##   (2 observations deleted due to missingness)
-    ## Multiple R-squared:  0.07148,    Adjusted R-squared:  0.01092 
-    ## F-statistic:  1.18 on 3 and 46 DF,  p-value: 0.3276
+    ## Multiple R-squared:  0.07364,    Adjusted R-squared:  0.01451 
+    ## F-statistic: 1.245 on 3 and 47 DF,  p-value: 0.3039
 
 ``` r
 FF3reg_nmr_sup = lm(nmr_sup~Mkt.RF+SMB+HML, data=assets_ff3)
@@ -1267,21 +1296,21 @@ summary(FF3reg_nmr_sup)
     ## 
     ## Residuals:
     ##    Min     1Q Median     3Q    Max 
-    ## -79.65 -32.55 -12.39  23.74  81.35 
+    ## -80.04 -31.06 -11.64  16.12  80.94 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)  
-    ## (Intercept)  -9.2074    14.1687  -0.650   0.5280  
-    ## Mkt.RF       -0.1603     0.2212  -0.725   0.4824  
-    ## SMB          -0.4716     0.4343  -1.086   0.2989  
-    ## HML           0.5380     0.2910   1.849   0.0893 .
+    ## (Intercept)  -8.9580    12.8814  -0.695   0.4990  
+    ## Mkt.RF       -0.1607     0.2122  -0.757   0.4625  
+    ## SMB          -0.4598     0.3661  -1.256   0.2313  
+    ## HML           0.5416     0.2724   1.988   0.0683 .
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 54.28 on 12 degrees of freedom
+    ## Residual standard error: 52.1 on 13 degrees of freedom
     ##   (36 observations deleted due to missingness)
-    ## Multiple R-squared:  0.2994, Adjusted R-squared:  0.1242 
-    ## F-statistic: 1.709 on 3 and 12 DF,  p-value: 0.2181
+    ## Multiple R-squared:  0.3013, Adjusted R-squared:   0.14 
+    ## F-statistic: 1.868 on 3 and 13 DF,  p-value: 0.1848
 
 ``` r
 FF3reg_NMR = lm(NMR~Mkt.RF+SMB+HML, data=assets_ff3)
@@ -1293,22 +1322,22 @@ summary(FF3reg_NMR)
     ## lm(formula = NMR ~ Mkt.RF + SMB + HML, data = assets_ff3)
     ## 
     ## Residuals:
-    ##    Min     1Q Median     3Q    Max 
-    ## -741.2 -207.4    1.4  194.7 1031.2 
+    ##     Min      1Q  Median      3Q     Max 
+    ## -744.30 -209.81   -9.11  200.10 1038.20 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)  
-    ## (Intercept)  26.4781    49.1246   0.539   0.5925  
-    ## Mkt.RF        0.2804     0.7400   0.379   0.7066  
-    ## SMB           0.7834     1.4494   0.540   0.5915  
-    ## HML          -1.5895     0.8285  -1.919   0.0612 .
+    ## (Intercept)  31.6724    48.5483   0.652   0.5173  
+    ## Mkt.RF        0.2874     0.7383   0.389   0.6988  
+    ## SMB           1.1061     1.3891   0.796   0.4299  
+    ## HML          -1.5016     0.8192  -1.833   0.0731 .
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 341.3 on 46 degrees of freedom
+    ## Residual standard error: 340.5 on 47 degrees of freedom
     ##   (2 observations deleted due to missingness)
-    ## Multiple R-squared:  0.08446,    Adjusted R-squared:  0.02475 
-    ## F-statistic: 1.415 on 3 and 46 DF,  p-value: 0.2506
+    ## Multiple R-squared:  0.08299,    Adjusted R-squared:  0.02446 
+    ## F-statistic: 1.418 on 3 and 47 DF,  p-value: 0.2494
 
 ``` r
 FF3reg_ETH = lm(ETH~Mkt.RF+SMB+HML, data=assets_ff3)
@@ -1321,21 +1350,21 @@ summary(FF3reg_ETH)
     ## 
     ## Residuals:
     ##     Min      1Q  Median      3Q     Max 
-    ## -440.45 -133.65   11.65  111.46  553.63 
+    ## -434.25 -129.38    7.98  115.38  572.82 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept) 27.48429   32.46555   0.847    0.402    
-    ## Mkt.RF       2.50180    0.48908   5.115 5.96e-06 ***
-    ## SMB          1.09257    0.95789   1.141    0.260    
-    ## HML         -0.08988    0.54751  -0.164    0.870    
+    ## (Intercept)  25.0110    31.9051   0.784    0.437    
+    ## Mkt.RF        2.4985     0.4852   5.150 5.06e-06 ***
+    ## SMB           0.9568     0.9129   1.048    0.300    
+    ## HML          -0.1360     0.5383  -0.253    0.802    
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 225.6 on 46 degrees of freedom
+    ## Residual standard error: 223.8 on 47 degrees of freedom
     ##   (2 observations deleted due to missingness)
-    ## Multiple R-squared:  0.4265, Adjusted R-squared:  0.3891 
-    ## F-statistic:  11.4 on 3 and 46 DF,  p-value: 1.03e-05
+    ## Multiple R-squared:  0.4233, Adjusted R-squared:  0.3864 
+    ## F-statistic:  11.5 on 3 and 47 DF,  p-value: 8.972e-06
 
 ``` r
 ff5url = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_CSV.zip"
@@ -1391,9 +1420,9 @@ Er_ff5 |> round(2)
 ```
 
     ##   sp500 nmr_one nmr_sup     NMR     ETH  Mkt.RF     SMB     HML     RMW     CMA 
-    ##    8.42    2.28   -8.79   32.38   57.39   11.84   -1.08   -0.27    8.40    2.14 
+    ##    8.75    2.38   -7.62   31.39   56.18   12.75    0.66    0.90    7.51    2.40 
     ##      RF 
-    ##    0.13
+    ##    0.14
 
 ``` r
 sd_ff5 = apply(assets_ff5,2,sd,na.rm=TRUE)
@@ -1401,9 +1430,9 @@ sd_ff5 |> round(2)
 ```
 
     ##   sp500 nmr_one nmr_sup     NMR     ETH  Mkt.RF     SMB     HML     RMW     CMA 
-    ##   54.36   34.26   56.22  341.47  283.02   69.21   37.99   58.88   33.05   38.19 
+    ##   53.87   33.92   54.72  338.67  280.28   68.82   39.61   58.88   33.33   37.86 
     ##      RF 
-    ##    0.16
+    ##    0.17
 
 ``` r
 Sharpe_ff5 = Er_ff5/sd_ff5
@@ -1411,26 +1440,26 @@ Sharpe_ff5 |> round(2)
 ```
 
     ##   sp500 nmr_one nmr_sup     NMR     ETH  Mkt.RF     SMB     HML     RMW     CMA 
-    ##    0.15    0.07   -0.16    0.09    0.20    0.17   -0.03    0.00    0.25    0.06 
+    ##    0.16    0.07   -0.14    0.09    0.20    0.19    0.02    0.02    0.23    0.06 
     ##      RF 
-    ##    0.82
+    ##    0.84
 
 ``` r
 cor(assets_ff5, use="pairwise.complete.obs") |> round(2)
 ```
 
     ##         sp500 nmr_one nmr_sup   NMR   ETH Mkt.RF   SMB   HML   RMW   CMA    RF
-    ## sp500    1.00    0.05   -0.01 -0.07  0.49   0.58  0.41  0.16  0.08 -0.14 -0.07
-    ## nmr_one  0.05    1.00    0.88 -0.15 -0.15  -0.10 -0.07  0.20  0.12  0.26 -0.26
-    ## nmr_sup -0.01    0.88    1.00  0.12 -0.21  -0.21 -0.10  0.41  0.41  0.63 -0.22
-    ## NMR     -0.07   -0.15    0.12  1.00  0.21   0.07  0.02 -0.27  0.02 -0.22 -0.01
-    ## ETH      0.49   -0.15   -0.21  0.21  1.00   0.64  0.30  0.00 -0.04 -0.19 -0.13
-    ## Mkt.RF   0.58   -0.10   -0.21  0.07  0.64   1.00  0.33  0.03  0.10 -0.18 -0.07
-    ## SMB      0.41   -0.07   -0.10  0.02  0.30   0.33  1.00  0.32 -0.38 -0.01 -0.20
-    ## HML      0.16    0.20    0.41 -0.27  0.00   0.03  0.32  1.00  0.20  0.67 -0.15
-    ## RMW      0.08    0.12    0.41  0.02 -0.04   0.10 -0.38  0.20  1.00  0.19 -0.03
-    ## CMA     -0.14    0.26    0.63 -0.22 -0.19  -0.18 -0.01  0.67  0.19  1.00 -0.21
-    ## RF      -0.07   -0.26   -0.22 -0.01 -0.13  -0.07 -0.20 -0.15 -0.03 -0.21  1.00
+    ## sp500    1.00    0.05   -0.01 -0.07  0.48   0.58  0.42  0.17  0.05 -0.13 -0.04
+    ## nmr_one  0.05    1.00    0.88 -0.15 -0.15  -0.10 -0.08  0.19  0.13  0.26 -0.26
+    ## nmr_sup -0.01    0.88    1.00  0.12 -0.21  -0.22 -0.11  0.37  0.40  0.62 -0.23
+    ## NMR     -0.07   -0.15    0.12  1.00  0.22   0.08  0.05 -0.25  0.00 -0.21  0.02
+    ## ETH      0.48   -0.15   -0.21  0.22  1.00   0.64  0.29  0.00 -0.05 -0.19 -0.12
+    ## Mkt.RF   0.58   -0.10   -0.22  0.08  0.64   1.00  0.34  0.04  0.08 -0.18 -0.05
+    ## SMB      0.42   -0.08   -0.11  0.05  0.29   0.34  1.00  0.35 -0.41  0.01 -0.10
+    ## HML      0.17    0.19    0.37 -0.25  0.00   0.04  0.35  1.00  0.17  0.67 -0.11
+    ## RMW      0.05    0.13    0.40  0.00 -0.05   0.08 -0.41  0.17  1.00  0.17 -0.08
+    ## CMA     -0.13    0.26    0.62 -0.21 -0.19  -0.18  0.01  0.67  0.17  1.00 -0.19
+    ## RF      -0.04   -0.26   -0.23  0.02 -0.12  -0.05 -0.10 -0.11 -0.08 -0.19  1.00
 
 ``` r
 # FF3 regressions
@@ -1444,21 +1473,21 @@ summary(FF5reg_nmr_one)
     ## 
     ## Residuals:
     ##      Min       1Q   Median       3Q      Max 
-    ## -103.113  -19.878    0.935   23.436   65.221 
+    ## -103.223  -18.878    0.737   23.282   64.774 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept)  2.09062    5.25736   0.398    0.693
-    ## Mkt.RF      -0.02655    0.08275  -0.321    0.750
-    ## SMB         -0.04984    0.18386  -0.271    0.788
-    ## HML          0.04841    0.13613   0.356    0.724
-    ## RMW          0.05911    0.18745   0.315    0.754
-    ## CMA          0.16999    0.19029   0.893    0.377
+    ## (Intercept)  1.91331    5.13823   0.372    0.711
+    ## Mkt.RF      -0.02713    0.08180  -0.332    0.742
+    ## SMB         -0.05846    0.17876  -0.327    0.745
+    ## HML          0.04737    0.13454   0.352    0.726
+    ## RMW          0.06209    0.18454   0.336    0.738
+    ## CMA          0.16982    0.18808   0.903    0.371
     ## 
-    ## Residual standard error: 35.3 on 44 degrees of freedom
+    ## Residual standard error: 34.91 on 45 degrees of freedom
     ##   (2 observations deleted due to missingness)
-    ## Multiple R-squared:  0.08044,    Adjusted R-squared:  -0.02405 
-    ## F-statistic: 0.7698 on 5 and 44 DF,  p-value: 0.5766
+    ## Multiple R-squared:  0.0821, Adjusted R-squared:  -0.01989 
+    ## F-statistic: 0.805 on 5 and 45 DF,  p-value: 0.5522
 
 ``` r
 FF5reg_nmr_sup = lm(nmr_sup~Mkt.RF+SMB+HML+RMW+CMA, data=assets_ff5)
@@ -1471,21 +1500,23 @@ summary(FF5reg_nmr_sup)
     ## 
     ## Residuals:
     ##     Min      1Q  Median      3Q     Max 
-    ## -68.791 -27.624   1.906  25.852  66.166 
+    ## -68.814 -25.306  -1.263  23.001  67.982 
     ## 
     ## Coefficients:
-    ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept)  -5.9507    13.0824  -0.455    0.659
-    ## Mkt.RF       -0.2574     0.2136  -1.205    0.256
-    ## SMB           0.3559     0.5793   0.614    0.553
-    ## HML          -0.3048     0.5179  -0.589    0.569
-    ## RMW           0.5361     0.4957   1.081    0.305
-    ## CMA           1.0115     0.5667   1.785    0.105
+    ##             Estimate Std. Error t value Pr(>|t|)  
+    ## (Intercept)  -6.4193    11.8098  -0.544    0.598  
+    ## Mkt.RF       -0.2559     0.2034  -1.258    0.235  
+    ## SMB           0.3242     0.5122   0.633    0.540  
+    ## HML          -0.3028     0.4933  -0.614    0.552  
+    ## RMW           0.5276     0.4714   1.119    0.287  
+    ## CMA           1.0103     0.5397   1.872    0.088 .
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 49.37 on 10 degrees of freedom
+    ## Residual standard error: 47.06 on 11 degrees of freedom
     ##   (36 observations deleted due to missingness)
-    ## Multiple R-squared:  0.517,  Adjusted R-squared:  0.2754 
-    ## F-statistic:  2.14 on 5 and 10 DF,  p-value: 0.1432
+    ## Multiple R-squared:  0.5175, Adjusted R-squared:  0.2982 
+    ## F-statistic:  2.36 on 5 and 11 DF,  p-value: 0.1094
 
 ``` r
 FF5reg_NMR = lm(NMR~Mkt.RF+SMB+HML+RMW+CMA, data=assets_ff5)
@@ -1498,21 +1529,21 @@ summary(FF5reg_NMR)
     ## 
     ## Residuals:
     ##     Min      1Q  Median      3Q     Max 
-    ## -732.25 -234.44   23.13  190.49  970.80 
+    ## -738.65 -224.76   22.99  186.23  982.53 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)
-    ## (Intercept) 15.76457   51.32189   0.307    0.760
-    ## Mkt.RF      -0.01258    0.80777  -0.016    0.988
-    ## SMB          1.86356    1.79484   1.038    0.305
-    ## HML         -2.16706    1.32886  -1.631    0.110
-    ## RMW          1.84896    1.82992   1.010    0.318
-    ## CMA         -0.01642    1.85759  -0.009    0.993
+    ## (Intercept) 22.24370   50.64941   0.439    0.663
+    ## Mkt.RF       0.01200    0.80629   0.015    0.988
+    ## SMB          2.14569    1.76208   1.218    0.230
+    ## HML         -2.14107    1.32619  -1.614    0.113
+    ## RMW          1.71646    1.81906   0.944    0.350
+    ## CMA          0.04456    1.85400   0.024    0.981
     ## 
-    ## Residual standard error: 344.6 on 44 degrees of freedom
+    ## Residual standard error: 344.2 on 45 degrees of freedom
     ##   (2 observations deleted due to missingness)
-    ## Multiple R-squared:  0.1072, Adjusted R-squared:  0.005693 
-    ## F-statistic: 1.056 on 5 and 44 DF,  p-value: 0.3975
+    ## Multiple R-squared:  0.1032, Adjusted R-squared:  0.0035 
+    ## F-statistic: 1.035 on 5 and 45 DF,  p-value: 0.4087
 
 ``` r
 FF5reg_ETH = lm(ETH~Mkt.RF+SMB+HML+RMW+CMA, data=assets_ff5)
@@ -1525,20 +1556,20 @@ summary(FF5reg_ETH)
     ## 
     ## Residuals:
     ##     Min      1Q  Median      3Q     Max 
-    ## -422.66 -136.81   17.84  131.91  615.59 
+    ## -419.79 -132.03   18.03  132.66  633.60 
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)  33.9538    34.2669   0.991    0.327    
-    ## Mkt.RF        2.5575     0.5393   4.742 2.25e-05 ***
-    ## SMB           0.3508     1.1984   0.293    0.771    
-    ## HML           0.2425     0.8873   0.273    0.786    
-    ## RMW          -0.6925     1.2218  -0.567    0.574    
-    ## CMA          -0.7514     1.2403  -0.606    0.548    
+    ## (Intercept)  31.2476    33.5716   0.931    0.357    
+    ## Mkt.RF        2.5461     0.5344   4.764 2.01e-05 ***
+    ## SMB           0.2602     1.1679   0.223    0.825    
+    ## HML           0.2174     0.8790   0.247    0.806    
+    ## RMW          -0.6285     1.2057  -0.521    0.605    
+    ## CMA          -0.7664     1.2289  -0.624    0.536    
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 230.1 on 44 degrees of freedom
+    ## Residual standard error: 228.1 on 45 degrees of freedom
     ##   (2 observations deleted due to missingness)
-    ## Multiple R-squared:  0.4292, Adjusted R-squared:  0.3643 
-    ## F-statistic: 6.616 on 5 and 44 DF,  p-value: 0.0001136
+    ## Multiple R-squared:  0.4262, Adjusted R-squared:  0.3625 
+    ## F-statistic: 6.685 on 5 and 45 DF,  p-value: 9.839e-05
